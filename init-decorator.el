@@ -1,44 +1,51 @@
-(defvar my/deco nil)
-(defun my/deco (decorator)
-  (setq my/deco decorator)
-   (funcall my/deco 'selected-frame))
+(defvar my/deco nil
+  "Symbol naming the frame-decorator function to apply to new frames.")
+
+(defvar my/fonts
+  '("JetBrainsMono Nerd Font 12"
+    "JetBrainsMono Nerd Font 14"
+    "FiraCode Nerd Font 12"
+    "FiraCode Nerd Font 14"
+    "Hack Nerd Font 12"
+    "CaskaydiaCove Nerd Font 12"
+    "Meslo LG M Nerd Font 12"
+    "UbuntuMono Nerd Font 12"))
+
+(defun my/toggle-font (font)
+  (interactive (list (completing-read "Font: " my/fonts nil t)))
+  (set-frame-font font nil t)
+  (message "Font: %s" font))
 
 
 (defun init-my/decorator ()
   ;; For the built-in themes which cannot use `require'.
   (require-theme 'modus-themes) ; `require-theme' is ONLY for the built-in Modus themes
   (define-key global-map (kbd "<f5>") #'modus-themes-toggle)
-  (message (format "%s" my/deco))
   (setq my/deco 'my/default-decorator)
-  (message (format "%s" my/deco))
 
-   (if (daemonp)
-       (add-hook 'after-make-frame-functions my/deco)
-     (funcall my/deco 'selected-frame)))
+  (if (daemonp)
+      (add-hook 'after-make-frame-functions my/deco)
+    (funcall my/deco (selected-frame))))
 
 
 (defun my/default-decorator (frame)
-  (message "YEYSIUODJF")
   (menu-bar-mode -1)
   (tool-bar-mode -1)
   (scroll-bar-mode -1)
-  (setq visible-bell -1)
+  (setq visible-bell t)
 
   (line-number-mode -1)
-
   (display-line-numbers-mode -1)
 
-  (load-theme 'modus-operandi-tinted)
+  (when (display-graphic-p frame)
+    (set-frame-font "JetBrainsMono Nerd Font 12" nil t))
 
-  (set-frame-font "Iosevka 14" nil t)
+  ;; FiraCode in vterm terminal buffers — tighter spacing suits terminal output
+  (add-hook 'vterm-mode-hook
+            (lambda () (face-remap-add-relative 'default :family "FiraCode Nerd Font")))
 
-  ;; (vertico-posframe-mode 1)
-  ;; (setq vertico-posframe-poshandler 'posframe-poshandler-frame-top-center)
-
-  ;; (which-key-mode 1)
-  ;; (which-key-posframe-mode 1)
-  ;; (setq which-key-posframe-poshandler 'posframe-poshandler-frame-bottom-center)
-  )
+  (unless (memq 'modus-operandi-tinted custom-enabled-themes)
+    (load-theme 'modus-operandi-tinted t)))
 
 
 (defun my/presentation-decorator (frame)
@@ -46,6 +53,8 @@
   (tool-bar-mode -1)
   (scroll-bar-mode -1)
   (display-line-numbers-mode -1)
-  (setq visible-bell -1)
-  (load-theme 'modus-vivendi)
-  (set-frame-font "Iosevka 16" nil t))
+  (setq visible-bell nil)
+  (load-theme 'modus-vivendi t))
+
+
+(init-my/decorator)

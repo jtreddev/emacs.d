@@ -6,14 +6,12 @@
   (vertico-mode)
   (vertico-multiform-mode 1)
 
-  ;; Different scroll margin
-  (setq vertico-scroll-margin 10)
-
-  ;; Show more candidates
+  (setq vertico-scroll-margin 3)
   (setq vertico-count 20)
-
-  ;; Grow and shrink the Vertico minibuffer
   (setq vertico-resize t)
-  (setq vertico-grid-mode t)
-  ;; Optionally enable cycling for `vertico-next' and `vertico-previous'.
-  (setq vertico-cycle  t))
+  (setq vertico-cycle t)
+
+  (setq vertico-multiform-commands
+        '((consult-line buffer)
+          (consult-imenu buffer)
+          (consult-ripgrep buffer))))

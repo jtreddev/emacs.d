@@ -109,8 +109,8 @@
    consult-theme :preview-key '(:debounce 0.2 any)
    consult-ripgrep consult-git-grep consult-grep
    consult-bookmark consult-recent-file consult-xref
-   consult--source-bookmark consult--source-file-register
-   consult--source-recent-file consult--source-project-recent-file
+   consult-source-bookmark consult-source-file-register
+   consult-source-recent-file consult-source-project-recent-file
    ;; :preview-key (kbd "M-.")
    :preview-key '(:debounce 0.4 any))
 
@@ -141,6 +141,11 @@
   ;;:elpaca nil
   :init
   (savehist-mode))
+
+;; Edit consult-ripgrep / grep results in-place — C-c C-p to enter wgrep, C-c C-c to commit
+(use-package wgrep
+  :ensure t
+  :custom (wgrep-auto-save-buffer t))
 
 ;; Optionally use the `orderless' completion style.
   ;; (use-package orderless

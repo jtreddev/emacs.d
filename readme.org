@@ -1,4 +1,262 @@
-#+TITLE: JTREDDEV's emacs configuration overview
+#+TITLE: JTREDDEV's Emacs Configuration
 #+AUTHOR: JTREDDEV
+#+PROPERTY: header-args:emacs-lisp :tangle no
 
-* Emacs
+* Overview
+
+Modular configuration targeting Emacs 30+. Packages managed by [[https://github.com/progfolio/elpaca][Elpaca]].
+Entry point is =init.el=, which loads each =init-*.el= shard in order.
+
+#+begin_src
+~/.emacs.d/
+├── early-init.el        disables package.el before startup
+├── init.el              loader: declares my/packages, loads shards, misc globals
+├── init-elpaca.el       Elpaca bootstrap + use-package integration
+├── init-vertico.el      vertical completion UI (vertico + multiform)
+├── init-corfu.el        in-buffer completion popup
+├── init-cape.el         completion-at-point extensions for Corfu
+├── init-consult.el      consult + orderless + savehist
+├── init-marginalia.el   annotation in minibuffer
+├── init-embark.el       embark + embark-consult
+├── init-magit.el        magit + transient
+├── init-rust.el         rustic (eglot) + apheleia + dape debug adapter
+├── init-ai.el           claude-code-ide + agent-shell + gptel
+├── init-tramp.el        TRAMP / Podman shortcuts for the vexxed project
+├── init-decorator.el    frame chrome, theme (modus), daemon-safe frame hooks
+├── custom.el            custom-set-variables (safe-local-variables etc.)
+├── init-cm.el           [NOT LOADED] legacy Windows build tool — vestigial
+└── init-org.el          [NOT LOADED] org-agenda — orphaned Windows path
+#+end_src
+
+** Active load order (=my/packages= in =init.el=)
+
+#+begin_example
+elpaca → vertico → corfu → cape → consult → marginalia →
+embark → magit → rust → ai → tramp → decorator
+#+end_example
+
+* Packages
+
+** Completion stack (MECE/Vertico family)
+
+| Package      | Role                                                      |
+|--------------+-----------------------------------------------------------|
+| =vertico=    | Vertical minibuffer UI; multiform + cycle enabled         |
+| =corfu=      | In-buffer popup (global mode)                             |
+| =cape=       | CAPF extensions: dabbrev, file, elisp-block               |
+| =consult=    | Ripgrep, buffer switch, xref preview, outline — full map  |
+| =orderless=  | Space-separated fuzzy/regexp completion styles             |
+| =marginalia= | Rich annotations in minibuffer                            |
+| =embark=     | Context actions on minibuffer candidates; embark-consult  |
+| =savehist=   | Persists minibuffer history across sessions               |
+
+Dispatchers wired in orderless: suffix === for literal, =,= for strict-initialism,
+=.= for flex.
+
+** Development
+
+| Package        | Role                                                              |
+|----------------+-------------------------------------------------------------------|
+| =rustic=       | Rust major mode; uses eglot, clippy on check, apheleia format     |
+| =eglot=        | LSP client (built-in 29+); workspace config per project           |
+| =consult-eglot=| =M-g s= → workspace symbol search                                |
+| =apheleia=     | Async format-on-save (rustfmt); global mode                       |
+| =dape=         | DAP debug adapter; =vexxed-lldb= config points at container bin   |
+| =magit=        | Git porcelain                                                     |
+
+** AI layer
+
+| Package           | Role                                                           |
+|-------------------+----------------------------------------------------------------|
+| =claude-code-ide= | Full Claude Code MCP integration; MCP server in Emacs process  |
+| =agent-shell=     | ACP-based Claude shell (login auth, no API key billing)        |
+| =gptel=           | In-buffer LLM; Anthropic backend, =ANTHROPIC_API_KEY= env var  |
+| =gptel-agent=     | gptel agent extension (karthink fork)                          |
+
+** Misc
+
+| Package     | Role                                          |
+|-------------+-----------------------------------------------|
+| =which-key= | Key hint popups                               |
+| =request=   | HTTP client (=blather= log level in config)   |
+| =vterm=     | Terminal backend used by =claude-code-ide=    |
+
+* Issues and Fixes
+
+** RESOLVED: claude-code-ide runs claude inside the =vexxed-dev= podman container
+
+The vexxed repo moved from a Toolbox dev env to a native podman devcontainer.
+Claude runs *inside* the =vexxed-dev= container (started by =sandbox/dev.sh=),
+driven by a host wrapper that =init-ai.el= points =claude-code-ide-cli-path= at:
+
+#+begin_src shell
+# ~/.local/bin/claude-container
+exec podman exec -it -w "$PWD" -e HOME=/home/dev \
+  -e CLAUDE_CODE_SSE_PORT -e ENABLE_IDE_INTEGRATION \
+  -e TERM_PROGRAM -e FORCE_CODE_TERMINAL -e CLAUDE_CODE_NO_FLICKER \
+  vexxed-dev claude "$@"
+#+end_src
+
+Three things make the MCP integration work end-to-end:
+- *Loopback parity:* claude-code-ide's MCP WebSocket server binds
+  =127.0.0.1:<port>= on the host. =sandbox/dev.sh= runs =vexxed-dev= with
+  =--network=host= so the in-container CLI can reach it. The wrapper forwards
+  =CLAUDE_CODE_SSE_PORT= (the lockfile has no auth token, so the env var alone
+  is enough).
+- *Path parity:* =sandbox/dev.sh= mirror-mounts the repo at its host path
+  (=-v "$ROOT":"$ROOT"=) in addition to =/work=. claude-code-ide's MCP file
+  ops =find-file= claude's literal paths with no container/TRAMP translation,
+  so claude (cwd =/home/jtreddev/vexxed= via the wrapper's =-w "$PWD"=) and the
+  local Emacs buffers share one path namespace. Open the project *locally*
+  (=C-c v= → =my/vexxed=) for this workflow; eglot uses the host rust-analyzer.
+- *Auth:* =sandbox/dev.sh= mounts =~/.claude= into the container so the CLI is
+  logged in.
+
+Start the container first (=sandbox/dev.sh=); the wrapper prints a clear
+message and exits if =vexxed-dev= isn't running. Use =C-c V= (=my/vexxed-tramp=,
+=/podman:vexxed-dev:/work/=) only for *in-container* eglot/compile — not the
+Claude workflow, since its =/work= paths don't line up with the wrapper.
+
+** MINOR: =custom.el= is declared but never loaded
+
+=init.el= sets =custom-file= but does not call =(load custom-file 'noerror)=.
+This means:
+- =custom-set-variables= written by =M-x customize= survive on disk but are
+  not applied on startup.
+- The =safe-local-variable-values= entry (which marks the podman =cli-path=
+  safe) is not loaded, so Emacs re-prompts each session.
+
+*Fix:* add one line to =init.el= after setting =custom-file=:
+
+#+begin_src emacs-lisp
+(setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+(load custom-file 'noerror)   ; ← add this
+#+end_src
+
+** VESTIGIAL: =init-cm.el= — Windows build-tool, not loaded
+
+=init-cm.el= loads =cm= and =cm-hide= from =site-lisp/emacs/= and references
+Windows executables (=_cm.exe=, =msdev=, =link.exe=). It is not in
+=my/packages= so it causes no startup error, but it is dead weight.
+Safe to delete.
+
+** VESTIGIAL: =init-org.el= — orphaned OneDrive path, not loaded
+
+=init-org.el= sets:
+#+begin_src emacs-lisp
+(setq org-agenda-files "~/../../OneDrive - Kimball International Inc/Org-Mode/agenda")
+#+end_src
+This Windows path does not exist on Linux. The file is not in =my/packages=
+so org-agenda currently has no agenda files configured and no keybindings.
+
+*Fix options:*
+1. Add ="org"= to =my/packages= and update the path to a valid Linux location.
+2. Inline minimal org settings in =init.el= if agenda is not needed.
+
+** INFO: =my/claude-watch-plans= — works correctly
+
+=init-ai.el= sets a =file-notify= watcher on =~/.claude/plans/= and
+auto-displays new/changed =.md= plans in a right side window. The directory
+exists and contains plans, so this fires correctly.
+
+If the directory were absent, =file-notify-add-watch= would error during
+=:config= evaluation and prevent =claude-code-ide= from loading. Guard it
+if you ever move the plans dir:
+#+begin_src emacs-lisp
+(when (file-directory-p (expand-file-name "~/.claude/plans/"))
+  (my/claude-watch-plans))
+#+end_src
+
+* Claude Code IDE Setup
+
+** How it works
+
+=claude-code-ide= starts the Claude CLI inside a =vterm= terminal buffer and
+wires it to an in-process MCP server. Emacs exposes tools to Claude: xref
+(LSP go-to-definition/references), tree-sitter, imenu, Flycheck/Flymake
+diagnostics, diff viewer, project navigation. Claude drives the editor; the
+diff viewer shows proposed changes inline.
+
+#+begin_example
+Emacs (MCP server on 127.0.0.1:<random port>)
+   └── vterm terminal
+         └── claude-container  →  podman exec … vexxed-dev claude
+               └── calls back into Emacs via MCP (vexxed-dev --network=host)
+#+end_example
+
+** Prerequisites
+
+#+begin_src sh
+# The vexxed-dev container must be running (claude runs inside it):
+sandbox/dev.sh     # build (if needed) + start vexxed-dev, then drop into a shell
+
+# vterm must be installed + its module compiled (it is — see init-ai.el)
+# ANTHROPIC_API_KEY must be set for gptel; claude-code-ide uses login auth
+#+end_src
+
+** Starting Claude
+
+| Key     | Command                    | Effect                          |
+|---------+----------------------------+---------------------------------|
+| =C-c '= | =claude-code-ide-menu=     | Open transient menu             |
+| —       | =claude-code-ide-start=    | Launch new session              |
+| —       | =claude-code-ide-continue= | Continue most recent session    |
+| —       | =claude-code-ide-stop=     | Stop current session            |
+| —       | =claude-code-ide-check-status= | Verify CLI detection        |
+
+After applying the =.dir-locals.el= fix above, =C-c '= from any buffer
+(inside or outside =~/vexxed=) will open the transient and start Claude.
+
+** Vexxed project integration
+
+The =.dir-locals.el= in =~/vexxed= configures rust-analyzer for the project:
+
+#+begin_src emacs-lisp
+(rust-ts-mode
+ . ((eglot-workspace-configuration
+     . (:rust-analyzer
+        (:procMacro (:enable t)
+         :cargo (:buildScripts (:enable t))
+         :check (:command "clippy"))))))
+#+end_src
+
+=M-x eglot= (or auto-started by =rustic=) picks this up. =M-g s= searches
+workspace symbols via =consult-eglot=.
+
+** TRAMP / container workflow (when container is running)
+
+#+begin_src emacs-lisp
+C-c v    ;; my/vexxed → project-switch-project into podman:vexxed:/home/jtreddev/vexxed/
+          ;; Once inside, eglot/compile/shell all route into the container
+#+end_src
+
+The TRAMP config in =init-tramp.el= sets =tramp-histfile-override nil= to
+prevent connection failures when the container's =$HOME= has no =.tramp_history=
+(rootless Podman footgun).
+
+* Key Bindings Reference
+
+| Key         | Command                     | File              |
+|-------------+-----------------------------+-------------------|
+| =C-c '=     | =claude-code-ide-menu=      | =init-ai.el=      |
+| =C-c RET=   | =gptel-send=                | =init-ai.el=      |
+| =C-c g=     | =gptel-menu=                | =init-ai.el=      |
+| =C-c v=     | =my/vexxed=                 | =init-tramp.el=   |
+| =C-c l=     | =org-store-link=            | =init-org.el= *   |
+| =C-c a=     | =org-agenda=                | =init-org.el= *   |
+| =C-c c=     | =org-capture=               | =init-org.el= *   |
+| =C-.=       | =embark-act=                | =init-embark.el=  |
+| =C-h B=     | =embark-bindings=           | =init-embark.el=  |
+| =C-x b=     | =consult-buffer=            | =init-consult.el= |
+| =M-s r=     | =consult-ripgrep=           | =init-consult.el= |
+| =M-g s=     | =consult-eglot-symbols=     | =init-rust.el=    |
+| =M-y=       | =consult-yank-pop=          | =init-consult.el= |
+| =<f5>=      | =modus-themes-toggle=       | =init-decorator.el= |
+
+* not-yet-loaded files (=cm=, =org=)
+
+These files exist but are not in =my/packages=:
+
+- =init-cm.el= :: Windows-only build integration. Safe to delete.
+- =init-org.el= :: Org + agenda, OneDrive path. Add ="org"= to =my/packages=
+  and update =org-agenda-files= to a local Linux path to activate.

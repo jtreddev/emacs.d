@@ -66,7 +66,7 @@
 (setq my/packages '("elpaca" ;; Elpaca is best to be first as it deals with early loading and package management.
 		    "vertico"
 		    "corfu" "cape" "consult" "marginalia" "embark" "magit" "rust" "ai"
-		    "tramp" "decorator"
+		    "tramp" "container" "decorator"
 		    ))
 
 (mapcar (lambda (pkg)
