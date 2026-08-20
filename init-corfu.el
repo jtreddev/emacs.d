@@ -18,6 +18,21 @@
   (global-corfu-mode)
   (corfu-popupinfo-mode 1))
 
+;; `nerd-icons' defaults `nerd-icons-font-family' to "Symbols Nerd Font Mono",
+;; a separate download that is not installed here; on Windows it would also be
+;; registered under its truncated legacy name "Symbols NFM".  Point it at a
+;; patched font that IS installed so glyphs render instead of tofu -- the
+;; JetBrainsMono Nerd Font carries the same glyph set.
+(use-package nerd-icons
+  :ensure t :demand t
+  :config
+  (when-let* ((family (my/first-available-font
+                       (append (when (eq system-type 'windows-nt)
+                                 '("Symbols NFM" "Symbols NF"))
+                               '("Symbols Nerd Font Mono" "Symbols Nerd Font")
+                               my/font-families))))
+    (setq nerd-icons-font-family family)))
+
 ;; Icons in the corfu popup — requires a Nerd Font in your terminal/GUI font
 (use-package nerd-icons-corfu
   :ensure t :after corfu

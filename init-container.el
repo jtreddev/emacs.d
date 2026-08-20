@@ -64,12 +64,16 @@ buffers that tools like rustic spawn subprocesses in — those inherit
 
 (defun vexxed-container--ensure-running ()
   "Best-effort start of the container. Creation stays sandbox/dev.sh's job."
+  ;; `call-process', not `shell-command-to-string': the single-quoted Go
+  ;; template and `2>/dev/null' are POSIX-shell syntax that cmd.exe cannot
+  ;; parse.  Passing argv directly needs no shell and no quoting at all.
   (unless (equal "true"
                  (string-trim
-                  (shell-command-to-string
-                   (format "%s inspect -f '{{.State.Running}}' %s 2>/dev/null"
-                           (shell-quote-argument vexxed-container-podman)
-                           (shell-quote-argument vexxed-container-name)))))
+                  (with-output-to-string
+                    (with-current-buffer standard-output
+                      (call-process vexxed-container-podman nil (list t nil) nil
+                                    "inspect" "-f" "{{.State.Running}}"
+                                    vexxed-container-name)))))
     (call-process vexxed-container-podman nil nil nil "start" vexxed-container-name)))
 
 (defun vexxed-container--wrap (program args)
@@ -105,8 +109,14 @@ Wrapped commands begin with podman (not a listed tool), so never double-wrap."
           (apply orig (plist-put args :command wrapped)))
       (apply orig args))))
 
-(advice-add 'process-file :around #'vexxed-container--process-file)
-(advice-add 'make-process :around #'vexxed-container--make-process)
+;; Only install the advice where podman actually exists.  These sit on the path
+;; of EVERY subprocess Emacs spawns, so on a host that can never route anything
+;; into a container (no podman -- e.g. Windows) they are pure overhead.  The
+;; definitions above stay loaded so `vexxed-container-register' and the
+;; customization group remain available if podman is installed later.
+(when (executable-find vexxed-container-podman)
+  (advice-add 'process-file :around #'vexxed-container--process-file)
+  (advice-add 'make-process :around #'vexxed-container--make-process))
 
 ;; --- rust-analyzer: eglot's documented contact point -------------------------
 ;; A function contact, so eglot's own `executable-find' check sees `podman' (present)

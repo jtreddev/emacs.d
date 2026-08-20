@@ -1,8 +1,15 @@
-(add-to-list 'load-path (expand-file-name "site-lisp/emacs" user-emacs-directory))
+(add-to-list 'load-path (expand-file-name "site-lisp/cm" user-emacs-directory))
+
+;; Configura's cm layer -- p4.el in particular, pulled in by cm.el when the
+;; tree is not a git workspace -- still uses the pre-24.3 cl.el names
+;; (`defun*', `loop', ...).  Those only exist once `cl' is loaded; cl.el moved
+;; to lisp/obsolete/ in Emacs 30 but is still shipped and still works.  Without
+;; this, cm.el dies with "Symbol's function definition is void: defun*".
+(unless (fboundp 'defun*)
+  (with-no-warnings (require 'cl)))
+
 (load-library "cm")
 (load-library "cm-hide")
-
-(setq cm-current-compilation-window-style 2) ;; current window layout split left/right
 
 (global-unset-key (kbd "C-,"))
 (global-set-key (kbd "M-o") 'cm-move-to-previous-window)

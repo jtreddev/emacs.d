@@ -9,9 +9,23 @@
 ;; inside the vexxed-dev container at the mirrored /home/jtreddev/vexxed path, so claude's file
 ;; paths match these buffers exactly (its MCP open-file/diff/diagnostics resolve correctly). eglot
 ;; uses the host rust-analyzer (~/.cargo/bin).
+(defcustom my/vexxed-root
+  (or (getenv "VEXXED_ROOT")
+      (if (eq system-type 'windows-nt)
+          (my/home-file "vexxed/")
+        "/home/jtreddev/vexxed/"))
+  "Local checkout of the vexxed project.
+Override with the VEXXED_ROOT environment variable or via Customize;
+the hardcoded default only exists on the Linux host."
+  :type 'directory
+  :group 'tools)
+
 (defun my/vexxed ()
   (interactive)
-  (project-switch-project "/home/jtreddev/vexxed/"))
+  (if (file-directory-p my/vexxed-root)
+      (project-switch-project my/vexxed-root)
+    (user-error "my/vexxed: %s does not exist; set `my/vexxed-root'"
+                my/vexxed-root)))
 (global-set-key (kbd "C-c v") #'my/vexxed)
 
 ;; In-container LSP/build: open the project via Tramp Podman against vexxed-dev (repo at /work).
@@ -20,5 +34,7 @@
 ;; use `my/vexxed' (local) for the Claude workflow and this one for in-container tooling.
 (defun my/vexxed-tramp ()
   (interactive)
+  (unless (executable-find "podman")
+    (user-error "my/vexxed-tramp: podman is not installed on this host"))
   (project-switch-project "/podman:vexxed-dev:/work/"))
 (global-set-key (kbd "C-c V") #'my/vexxed-tramp)
